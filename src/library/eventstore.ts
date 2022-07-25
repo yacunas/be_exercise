@@ -2,6 +2,9 @@ import cloneDeep from 'clone-deep';
 import EventEmitter from 'events';
 import { AggregateType, Event } from '../events';
 
+/**
+ * EventStore manages all the events of the aggregates. It stores the chronological order of the events.
+ */
 export default class EventStore extends EventEmitter {
   private _events: Event<any, any>[] = [];
 

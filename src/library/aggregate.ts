@@ -1,6 +1,10 @@
 import { AggregateType, Event } from '../events';
 import EventStore from './eventstore';
 
+/**
+ * Aggregates controls the business logic of the domain. It consumes events on the eventstore
+ * to calculate the state to the latest, and any new events that will be added to the aggregate.
+ */
 export default abstract class Aggregate<T> {
   protected version: number = 0;
   protected id: string;

@@ -4,6 +4,11 @@ import EventEmitter from 'events';
 import { AggregateType, Event } from '../events';
 import EventStore from './eventstore';
 
+/**
+ * Projections are consumers and listeners of the events. This has a set of events that will consume and
+ * listen whenever new events are published through `_eventTypes`. This is then processed to calculate/come up a state
+ * that will be used for querying. Like keeping track of accounts, deposits, withdrawals, etc. records.
+ */
 export default abstract class Projection {
   private _queue = new Queue({ concurrency: 1 });
   private _subscriber: EventEmitter | null = null;
