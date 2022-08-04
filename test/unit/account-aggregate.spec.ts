@@ -1,6 +1,6 @@
 import { assert, expect } from 'chai';
 import { AccountEvents, AggregateType, Event } from '../../src/events';
-import { AccountNotFoundError, InsufficientFundError } from '../../src/library/errors';
+import { AccountAlreadyExistsError, AccountNotFoundError, InsufficientFundError } from '../../src/library/errors';
 import EventStore from '../../src/library/eventstore';
 
 import AccountAggregate from '../../src/aggregate/account';
@@ -75,7 +75,7 @@ describe('AccountAggregate', function () {
             username: 'cherryp',
           },
           this.eventStore,
-        ));
+        )).to.throw(AccountAlreadyExistsError);
       });
     });
 

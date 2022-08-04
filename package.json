@@ -7,6 +7,9 @@
   },
   "dependencies": {
     "clone-deep": "^4.0.1",
+    "mongodb": "^4.8.1",
+    "mongodb-memory-server": "^8.8.0",
+    "mongoose-typescript": "^2.3.3",
     "p-queue": "^6.2.1"
   },
   "devDependencies": {
@@ -22,7 +25,7 @@
     "wait-for-expect": "^3.0.2"
   },
   "scripts": {
-    "test": "TS_NODE_PROJECT=tsconfig.json TS_NODE_FILES=true mocha ./test/**/*.spec.ts"
+    "test": "mocha \"./test/**/*.spec.ts\" "
   },
   "repository": {
     "type": "git",
