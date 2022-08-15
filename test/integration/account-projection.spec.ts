@@ -6,7 +6,6 @@ import { expect } from 'chai';
 import mongoose from 'mongoose';
 import {mongodbUri} from '../../src/config/mongo';
 import AccountModel from '../../src/model/account';
-import CreditDebitModel from '../../src/model/credit-debit';
 
 async function findById(id: string): Promise<{
   username: string;
@@ -14,42 +13,7 @@ async function findById(id: string): Promise<{
   email: string;
   balance: number;
 } | null> {
-
-  const accountQuery = await AccountModel.find({
-    aggregateId: id
-  });
-  
-  const creditDebitQuery = await CreditDebitModel.find({
-    aggregateId: id
-  });
-
-  if(accountQuery){
-    const latestAccountVersion = Math.max.apply(Math, accountQuery.map(function(account) { return account.version; }))
-    const latestCreditDebitVersion = Math.max.apply(Math, creditDebitQuery.map(function(creditDebit) { return creditDebit.version; }))
-
-    const account = await AccountModel.findOne({
-      aggregateId: id,
-      version: latestAccountVersion
-    });
-
-    const creditDebit = await CreditDebitModel.findOne({
-      aggregateId: id,
-      version: latestCreditDebitVersion
-    });
-
-    if(account && creditDebit){
-      const finalAccount = {
-        username: account.body.username,
-        fullName: account.body.fullName,
-        email: account.body.email,
-        balance: creditDebit.body.balance,
-        totalApprovedDepositAmount: account.body.totalApprovedDepositAmount,
-        totalApprovedWithdrawalAmount: account.body.totalApprovedWithdrawalAmount
-      };
-      return finalAccount;
-    }
-  }
-  return null;
+  return await AccountModel.findById(id, {_id: 0, __v: 0, password: 0}).lean();
 }
 
 describe('AccountProjection', function () {
@@ -58,7 +22,6 @@ describe('AccountProjection', function () {
 
       this.db = await mongoose.connect(mongodbUri);
       mongoose.connection.on('error', console.error);
-      console.log('connected from test @', mongodbUri);
 
       this.eventStore = new EventStore(AccountEvents);
       this.projection = new AccountProjection(this.eventStore);
@@ -71,7 +34,7 @@ describe('AccountProjection', function () {
 
     after(async function () {
       await mongoose.connection.collections.accounts.drop();
-      await mongoose.connection.collections.creditdebits.drop(); 
+      await mongoose.connection.collections.accountevents.drop();
       await mongoose.connection.collections.depositwithdrawals.drop(); 
       await this.db.disconnect();
     });
@@ -81,8 +44,8 @@ describe('AccountProjection', function () {
         username: 'jdoe',
         fullName: 'johndoe',
         email: 'email@ml.com',
-        balance: 23, //I was not able to arrive to a 27 balance since in my understanding I must base my calculation the same from the account-aggregate.spec.ts inorder to be consistent on Credit and Debit transactions thus based on events.ts the calculation was (20 + 10)-7  respectively in chronological order.
-        totalApprovedWithdrawalAmount: 7, //I was not able to arrive to a totalApprovedWithdrawalAmount of 3 since in my understanding the total withdrawal transactions were only 7 and 7 respectively but only the first 7 was approved.
+        balance: 23,
+        totalApprovedWithdrawalAmount: 7,
         totalApprovedDepositAmount: 10,
       });
     });
