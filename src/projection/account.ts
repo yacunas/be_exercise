@@ -23,12 +23,23 @@ export default class AccountProjection extends Projection {
     let account: AccountDocument;
     let accountEvents: AccountEventsDocument;
     let depositWithdrawal: DepositWithdrawalDocument;
+    let accountEvent: AccountEvent;
+
+    type AccountEvent = {
+      username: string,
+      fullName: string,
+      email: string,
+      password: string,
+      balance: number,
+      totalApprovedWithdrawalAmount: number,
+      totalApprovedDepositAmount: number
+    }
 
     await mongoose.connect(mongodbUri);
     mongoose.connection.on('error', console.error);
     
-    function pushAccountEvent(account: AccountDocument, accountEvents: AccountEventsDocument): AccountEventsDocument{
-      accountEvents.events.push({
+    function newAccountEvent(account: any): AccountEvent{
+      accountEvent = {
         username: account.username,
         fullName: account.fullName,
         email: account.email,
@@ -36,9 +47,11 @@ export default class AccountProjection extends Projection {
         balance: account.balance,
         totalApprovedWithdrawalAmount: account.totalApprovedWithdrawalAmount,
         totalApprovedDepositAmount: account.totalApprovedDepositAmount
-      });
-      return accountEvents as AccountEventsDocument;
+      }
+      return accountEvent as AccountEvent;
     }
+    const accountQuery = await AccountModel.findById(event.aggregateId);
+    const accountEventsQuery = await AccountEventsModel.findById(event.aggregateId);
 
     if(event.aggregateType === AggregateType.Account){
       if(event.type == 'AccountCreated'){
@@ -82,148 +95,39 @@ export default class AccountProjection extends Projection {
         );
       }
       else if(event.type === 'AccountUpdated'){
-        const accountQuery = await AccountModel.findById(event.aggregateId);
-        const accountEventsQuery = await AccountEventsModel.findById(event.aggregateId);
-
+        let update: any;
         if(accountQuery && accountEventsQuery){
           if(event.body.username){
-            account = {
-              _id: accountQuery._id,
-              username: event.body.username,
-              fullName: accountQuery.fullName,
-              password: accountQuery.password,
-              balance: accountQuery.balance,
-              email: accountQuery.email,
-              totalApprovedWithdrawalAmount: accountQuery.totalApprovedWithdrawalAmount,
-              totalApprovedDepositAmount: accountQuery.totalApprovedDepositAmount,
-            };
-            accountEvents = pushAccountEvent(account, accountEventsQuery);
+            update = {username: event.body.username};
           }
           else if(event.body.fullName){
-            account = {
-              _id: accountQuery._id,
-              username: accountQuery.username,
-              fullName: event.body.fullName,
-              password: accountQuery.password,
-              balance: accountQuery.balance,
-              email: accountQuery.email,
-              totalApprovedWithdrawalAmount: accountQuery.totalApprovedWithdrawalAmount,
-              totalApprovedDepositAmount: accountQuery.totalApprovedDepositAmount
-            };
-            accountEvents = pushAccountEvent(account, accountEventsQuery);
+            update = {fullName: event.body.fullName};
           }
           else if(event.body.email){
-            account = {
-              _id: accountQuery._id,
-              username: accountQuery.username,
-              fullName: accountQuery.fullName,
-              password: accountQuery.password,
-              balance: accountQuery.balance,
-              email: event.body.email,
-              totalApprovedWithdrawalAmount: accountQuery.totalApprovedWithdrawalAmount,
-              totalApprovedDepositAmount: accountQuery.totalApprovedDepositAmount
-            };
-            accountEvents = pushAccountEvent(account, accountEventsQuery);
+            update = {email: event.body.email};
           }
-          
-          await AccountModel.deleteOne({ _id: accountQuery._id }).then(async function(){
-            await AccountModel.create(
-              account,
-              AccountModel.ensureIndexes((err) => {
-                if (err) {
-                  console.log(err.message);
-                }
-              }),
-            );
-            AccountEventsModel.updateOne({_id: accountEventsQuery._id}, accountEvents, 
-              (err) => {
-                if (err) {
-                console.log(err.message);
-              }
+          await AccountModel.findByIdAndUpdate(accountQuery._id, {$set: update}, {new: true}).then(async function (acc){
+            if(acc){
+              await AccountEventsModel.updateOne({_id: accountEventsQuery._id}, {$push: {events: newAccountEvent(acc)}});
+            }}).catch(function(err){
+              console.log(err);
             });
-          }).catch(function(err){
-            console.log(err);
-          });
         };
         
       }
-      else if(event.type === 'BalanceCredited'){
-        const accountQuery = await AccountModel.findById(event.aggregateId);
-        const accountEventsQuery = await AccountEventsModel.findById(event.aggregateId);
-
+      else if(event.type === 'BalanceCredited' || event.type === 'BalanceDebited'){
+        let newBalance: number;
         if(accountQuery && accountEventsQuery){
-          const newBalance = accountQuery.balance + event.body.amount;
-          account = {
-            _id: accountQuery._id,
-            username: accountQuery.username,
-            fullName: accountQuery.fullName,
-            email: accountQuery.email,
-            password: accountQuery.password,
-            balance: newBalance,
-            totalApprovedWithdrawalAmount: accountQuery.totalApprovedWithdrawalAmount,
-            totalApprovedDepositAmount: accountQuery.totalApprovedDepositAmount
-          };
-          accountEvents = pushAccountEvent(account, accountEventsQuery);
-
-          await AccountModel.deleteOne({ _id: accountQuery._id }).then(async function(){
-            await AccountModel.create(
-              account,
-              AccountModel.ensureIndexes((err) => {
-                if (err) {
-                  console.log(err.message);
-                }
-              }),
-            );
-            AccountEventsModel.updateOne({_id: accountEventsQuery._id}, accountEvents, 
-              (err) => {
-                if (err) {
-                console.log(err.message);
-              }
+          event.type === 'BalanceCredited'? newBalance = accountQuery.balance + event.body.amount : newBalance = accountQuery.balance - event.body.amount;
+          await AccountModel.findByIdAndUpdate(accountQuery._id, {$set:{balance: newBalance}}, {new: true}).then(async function (acc){
+            if(acc){
+              await AccountEventsModel.updateOne({_id: accountEventsQuery._id}, {$push: {events: newAccountEvent(acc)}});
+            }}).catch(function(err){
+              console.log(err);
             });
-          }).catch(function(err){
-            console.log(err);
-          });
         }
       }
-      else if(event.type === 'BalanceDebited'){
-        const accountQuery = await AccountModel.findById(event.aggregateId);
-        const accountEventsQuery = await AccountEventsModel.findById(event.aggregateId);
-        
-        if(accountQuery && accountQuery.balance && accountEventsQuery){
-          if(accountQuery.balance > event.body.amount){
-            const newBalance = accountQuery.balance - event.body.amount;            
-            account = {
-              _id: accountQuery._id,
-              username: accountQuery.username,
-              fullName: accountQuery.fullName,
-              email: accountQuery.email,
-              password: accountQuery.password,
-              balance: newBalance,
-              totalApprovedWithdrawalAmount: accountQuery.totalApprovedWithdrawalAmount,
-              totalApprovedDepositAmount: accountQuery.totalApprovedDepositAmount
-            };
-            accountEvents = pushAccountEvent(account, accountEventsQuery);
-            await AccountModel.deleteOne({ _id: accountQuery._id }).then(async function(){
-            await AccountModel.create(
-              account,
-              AccountModel.ensureIndexes((err) => {
-                if (err) {
-                  console.log(err.message);
-                }
-              }),
-            );
-            AccountEventsModel.updateOne({_id: accountEventsQuery._id}, accountEvents, 
-              (err) => {
-                if (err) {
-                console.log(err.message);
-              }
-            });
-          }).catch(function(err){
-            console.log(err);
-          });
-          }
-        }
-      }
+      
     }
     else if(event.aggregateType === AggregateType.Deposit){
       if(event.type === 'DepositCreated'){
@@ -267,39 +171,19 @@ export default class AccountProjection extends Projection {
               }
             })
           );
+          
           const accountQuery = await AccountModel.findById(depositCreatedQuery.body.account);
           const accountEventsQuery = await AccountEventsModel.findById(depositCreatedQuery.body.account);
 
           if(accountQuery && depositCreatedQuery.body.balance && accountEventsQuery){
-            account = {
-              _id: accountQuery._id,
-              username: accountQuery.username,
-              fullName: accountQuery.fullName,
-              password: accountQuery.password,
-              balance: accountQuery.balance,
-              email: accountQuery.email,
-              totalApprovedWithdrawalAmount: accountQuery.totalApprovedWithdrawalAmount,
-              totalApprovedDepositAmount: depositCreatedQuery.body.balance + accountQuery.totalApprovedDepositAmount
-            };
-            accountEvents = pushAccountEvent(account, accountEventsQuery);
-            await AccountModel.deleteOne({ _id: accountQuery._id }).then(async function(){
-            await AccountModel.create(
-              account,
-              AccountModel.ensureIndexes((err) => {
-                if (err) {
-                  console.log(err.message);
-                }
-              }),
-            );
-            AccountEventsModel.updateOne({_id: accountEventsQuery._id}, accountEvents, 
-              (err) => {
-                if (err) {
-                console.log(err.message);
-              }
-            });
-              }).catch(function(err){
-              console.log(err);
-            });
+            const newTotalApprovedDepositAmount = depositCreatedQuery.body.balance + accountQuery.totalApprovedDepositAmount;
+            await AccountModel.findByIdAndUpdate(accountQuery._id, {$set:{totalApprovedDepositAmount: newTotalApprovedDepositAmount}}, {new: true}).then(async function (acc){
+              if(acc){
+                await AccountEventsModel.updateOne({_id: accountEventsQuery._id}, {$push: {events: newAccountEvent(acc)}});
+              }}).catch(function(err){
+                console.log(err);
+              });  
+
           }
         }
         
@@ -352,35 +236,15 @@ export default class AccountProjection extends Projection {
           const accountEventsQuery = await AccountEventsModel.findById(withdrawalCreatedQuery.body.account);
 
           if(accountQuery && withdrawalCreatedQuery.body.balance && accountEventsQuery){
-            account = {
-              _id: accountQuery._id,
-              username: accountQuery.username,
-              fullName: accountQuery.fullName,
-              password: accountQuery.password,
-              balance: accountQuery.balance,
-              email: accountQuery.email,
-              totalApprovedWithdrawalAmount: withdrawalCreatedQuery.body.balance + accountQuery.totalApprovedWithdrawalAmount,
-              totalApprovedDepositAmount: accountQuery.totalApprovedDepositAmount
-            };
-            accountEvents = pushAccountEvent(account, accountEventsQuery);
-            await AccountModel.deleteOne({ _id: accountQuery._id }).then(async function(){
-            await AccountModel.create(
-              account,
-              AccountModel.ensureIndexes((err) => {
-                if (err) {
-                  console.log(err.message);
-                }
-              }),
-            );
-            AccountEventsModel.updateOne({_id: accountEventsQuery._id}, accountEvents, 
-              (err) => {
-                if (err) {
-                console.log(err.message);
-              }
-            });
-              }).catch(function(err){
-              console.log(err);
-            });
+            const newTotalApprovedWithdrawalAmount = withdrawalCreatedQuery.body.balance + accountQuery.totalApprovedWithdrawalAmount;
+
+            await AccountModel.findByIdAndUpdate(accountQuery._id, {$set:{totalApprovedWithdrawalAmount: newTotalApprovedWithdrawalAmount}}, {new: true}).then(async function (acc){
+              if(acc){
+                await AccountEventsModel.updateOne({_id: accountEventsQuery._id}, {$push: {events: newAccountEvent(acc)}});
+              }}).catch(function(err){
+                console.log(err);
+              });  
+
           }
         } 
       }
