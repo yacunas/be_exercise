@@ -15,7 +15,7 @@ export type AccountEventsDocument = {
 
 const accountsEventSchema = new Schema<AccountEventsDocument>({
     _id: {type: String},
-    events: [{
+    events: [new Schema({
         username: {type: String},
         fullName: {type: String},
         email: {type: String},
@@ -23,7 +23,9 @@ const accountsEventSchema = new Schema<AccountEventsDocument>({
         balance: {type: Number},
         totalApprovedWithdrawalAmount: {type: Number},
         totalApprovedDepositAmount: {type: Number}
-    }]
+    },
+    {_id: false})
+]
 }
 );
 
